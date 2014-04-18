@@ -5,7 +5,8 @@ from properties import prepregProperties, wireProperties, DiscretizeProperties, 
 from structures import PrescribedLoad, Strain, \
                        MassProperties, FEM, Strains, Failures, Structures
 from lift_drag import LiftDrag, Fblade
-from vortex import VortexRing
+#from vortex import VortexRing
+from cython_code.vortex_cython import VortexRing
 from thrust import Thrust, ActuatorDiskInducedVelocity
 from aero import Aero, Aero2
 from aerostructural import AeroStructural, Results
