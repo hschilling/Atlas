@@ -27,8 +27,15 @@ from numpy import pi, cos, sin, mean, linspace , sqrt
 
 #from libc.math cimport sqrt # that is for scalars
 
-def main_loop(h,rho,yE,dy,qh,Nw,Ntt,Ns,z,r,Gamma,Omega,dT, yN, b,dtheta,thetaArray,cr):
+def main_loop(double h,double rho,yE,dy,qh,int Nw,int Ntt,int Ns,np.ndarray[DTYPE_t, ndim=2] z,
+    np.ndarray[DTYPE_t, ndim=2] r,np.ndarray[DTYPE_t, ndim=2] Gamma,Omega,dT, yN, b,double dtheta,thetaArray,double cr):
     '''return vz, vr,z,r,Gamma'''
+
+    cdef unsigned int t, tt, i, s, ii, ss, iii
+    cdef unsigned int NTheta
+    cdef double zr,r_scalar,zp,yp
+    cdef np.ndarray[DTYPE_t, ndim=2] vz,vr, M, X2
+    cdef np.ndarray[np.double_t, ndim=1] Normal
 
     print "inside main_loop: NW,Ntt,Ns,max(thetaArray.shape)",Nw,Ntt,Ns,max(thetaArray.shape)
 
@@ -45,12 +52,12 @@ def main_loop(h,rho,yE,dy,qh,Nw,Ntt,Ns,z,r,Gamma,Omega,dT, yN, b,dtheta,thetaArr
                     for ii in range(t):              # add the velocity induced from each disk
                         for ss in range(1, Ns+1):  # and each ring on each disk (inner ring cancels itself out)
                             zr = z[ii, ss]
-                            r  = r[ii, ss]
+                            r_scalar  = r[ii, ss]
                             zp = z[i, s]
                             yp = r[i, s]
-                            M  = Gamma[ii, ss] * r * dtheta / (2*pi)
-                            X2 = (-r*sin(thetaArray))**2
-                            Y2 = (yp - r*cos(thetaArray))**2
+                            M  = Gamma[ii, ss] * r_scalar * dtheta / (2*pi)
+                            X2 = (-r_scalar*sin(thetaArray))**2
+                            Y2 = (yp - r_scalar*cos(thetaArray))**2
                             Z2 = (zp - zr)**2
                             Normal = sqrt(X2 + Y2 + Z2)
                             for iii in range(max(thetaArray.shape)):
