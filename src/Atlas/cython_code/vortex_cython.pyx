@@ -6,6 +6,9 @@ cimport cython
 #import numpy as np
 cimport numpy as np 
 
+
+import time
+
 # You have to use both:
 
 # cimport numpy
@@ -27,23 +30,56 @@ from numpy import pi, cos, sin, mean, linspace , sqrt
 
 #from libc.math cimport sqrt # that is for scalars
 
-def main_loop(double h,double rho,yE,dy,qh,int Nw,int Ntt,int Ns,np.ndarray[DTYPE_t, ndim=2] z,
-    np.ndarray[DTYPE_t, ndim=2] r,np.ndarray[DTYPE_t, ndim=2] Gamma,Omega,dT, yN, b,double dtheta,thetaArray,double cr):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+def main_loop(
+    double h,
+    double rho,
+    np.ndarray[DTYPE_t, ndim=2] yE,
+    np.ndarray[DTYPE_t, ndim=2] dy,
+    double[:] qh,
+    int Nw,
+    int Ntt,
+    int Ns,
+    np.ndarray[DTYPE_t, ndim=2] z,
+    np.ndarray[DTYPE_t, ndim=2] r,
+    np.ndarray[DTYPE_t, ndim=2,mode='c']  Gamma,
+    #double[:, ::1]  Gamma,
+    double Omega,
+    np.ndarray[DTYPE_t, ndim=2] dT, 
+    np.ndarray[DTYPE_t, ndim=2] yN,
+    double b,
+    double dtheta,
+    unsigned int Ntheta,
+    double[:] thetaArray,
+    double cr):
     '''return vz, vr,z,r,Gamma'''
 
     cdef unsigned int t, tt, i, s, ii, ss, iii
-    cdef unsigned int NTheta
-    cdef double zr,r_scalar,zp,yp
-    cdef np.ndarray[DTYPE_t, ndim=2] vz,vr, M, X2
-    cdef np.ndarray[np.double_t, ndim=1] Normal
+    cdef double zr,r_scalar,zp,yp, M, Z2
+    cdef np.ndarray[DTYPE_t, ndim=2] vz,vr
+    cdef np.ndarray[np.double_t, ndim=1] Normal, X2, Y2
+    cdef double dt
 
-    print "inside main_loop: NW,Ntt,Ns,max(thetaArray.shape)",Nw,Ntt,Ns,max(thetaArray.shape)
+    cdef double pi_c = pi
+    cdef int max_thetaArray_shape = Ntheta
+
+    cdef double one_over_two_pi = 1.0/ 2 * pi
+
+    #cdef double[:] sin_thetaArray, cos_thetaArray
+    sin_thetaArray = sin(thetaArray)
+    cos_thetaArray = cos(thetaArray)
+
+    #sin_thetaArray = sin( thetaArray)
+    #cos_thetaArray = cos( thetaArray)
+
+    #print "inside main_loop: NW,Ntt,Ns,thetaArray.shape",Nw,Ntt,Ns,thetaArray.shape
 
      # free-wake time stepping
     for t in range(Nw+1):
         # proceed with substeps
         for tt in range(Ntt):
-            print "inner"
             # Compute induced velocity on all ix(Ns+1) rings from all iix(Ns+1) rings
             vz = np.zeros((Nw+1, Ns+1))
             vr = np.zeros((Nw+1, Ns+1))
@@ -55,26 +91,37 @@ def main_loop(double h,double rho,yE,dy,qh,int Nw,int Ntt,int Ns,np.ndarray[DTYP
                             r_scalar  = r[ii, ss]
                             zp = z[i, s]
                             yp = r[i, s]
-                            M  = Gamma[ii, ss] * r_scalar * dtheta / (2*pi)
-                            X2 = (-r_scalar*sin(thetaArray))**2
-                            Y2 = (yp - r_scalar*cos(thetaArray))**2
+                            M  = Gamma[ii, ss] * r_scalar * dtheta * one_over_two_pi
+                            #X2 = (-r_scalar*sin(thetaArray))**2
+                            X2 = (-r_scalar*sin_thetaArray)**2
+                            #Y2 = (yp - r_scalar*cos(thetaArray))**2
+                            Y2 = (yp - r_scalar*cos_thetaArray)**2
                             Z2 = (zp - zr)**2
                             Normal = sqrt(X2 + Y2 + Z2)
-                            for iii in range(max(thetaArray.shape)):
-                                if Normal[iii] < cr:
-                                    Normal[iii] = cr
+                            # a[np.abs(a) < eps] = 0
+                            Normal[ Normal < cr ] = cr
+                            # for iii in range(max_thetaArray_shape):
+                            #     if Normal[iii] < cr:
+                            #         Normal[iii] = cr
                             Norm3 = Normal**3
-                            vr[i, s] = vr[i, s] + np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
-                            vz[i, s] = vz[i, s] + np.sum((cos(thetaArray) * yp - r) / Norm3) * M
+                            inv_Norm3 = 1.0/ Norm3
+                            #vr[i, s] = vr[i, s] + np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
+                            vr[i, s] = vr[i, s] + np.sum(-cos_thetaArray * (zp - zr) * inv_Norm3) * M
+                            #vz[i, s] = vz[i, s] + np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
+                            vz[i, s] = vz[i, s] + np.sum((cos_thetaArray * yp - r_scalar) * inv_Norm3) * M
                             zr = -2*h - z[ii, ss]
                             Z2 = (zp - zr)**2
                             Normal = sqrt(X2 + Y2 + Z2)
-                            for iii in range(max(thetaArray.shape)):
-                                if Normal[iii] < cr:
-                                    Normal[iii] = cr
+                            Normal[ Normal < cr ] = cr
+                            # for iii in range(max_thetaArray_shape):
+                            #     if Normal[iii] < cr:
+                            #         Normal[iii] = cr
                             Norm3 = Normal**3
-                            vr[i, s] = vr[i, s] - np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
-                            vz[i, s] = vz[i, s] - np.sum((cos(thetaArray) * yp - r) / Norm3) * M
+                            inv_Norm3 = 1.0/ Norm3
+                            vr[i, s] = vr[i, s] - np.sum(-cos_thetaArray * (zp - zr) * inv_Norm3) * M
+                            #vr[i, s] = vr[i, s] - np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
+                            vz[i, s] = vz[i, s] - np.sum((cos_thetaArray * yp - r_scalar) * inv_Norm3) * M
+                            #vz[i, s] = vz[i, s] - np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
 
             # Compute altitude and time power approximation
             # if tt == 0:
@@ -83,12 +130,13 @@ def main_loop(double h,double rho,yE,dy,qh,int Nw,int Ntt,int Ns,np.ndarray[DTYP
             # altitude = self.vc * realtime
 
             # Convect rings downstream
-            dt = 2*pi / Omega / b / Ntt
+            dt = 2*pi_c / Omega / b / Ntt
             for i in range(t):              # for each disk
                 for s in range(Ns+1):  # and for each ring on each disk
                     z[i, s] = z[i, s] + vz[i, s]*dt
                     r[i, s] = r[i, s] + vr[i, s]*dt
                     Gamma[i, s] = Gamma[i, s]
+
         # Shift elements in ring array
         for i in range(t)[::-1]:
             Gamma[i+1, :] = Gamma[i, :]
@@ -104,9 +152,9 @@ def main_loop(double h,double rho,yE,dy,qh,int Nw,int Ntt,int Ns,np.ndarray[DTYP
         r[0, :] = yN.T
         z[0, :] = qh[:]
 
-        return vz,vr,z,r,Gamma
+    return vz,vr,z,r,Gamma
 
-class VortexRing(Component):
+class VortexRingCython(Component):
     """
     Vortex ring calculations
     Computes the induced velocity on the rotor blades given the
@@ -139,7 +187,7 @@ class VortexRing(Component):
         print "inside cython version"
 
         cdef unsigned int t, tt, i, s, ii, ss, iii
-        cdef unsigned int Nw, Ntt, NTheta
+        cdef unsigned int Nw, Ntt, Ntheta, max_thetaArray_shape
 
         cdef np.ndarray[DTYPE_t, ndim=2] dy, yE
         cdef np.ndarray[DTYPE_t, ndim=2] qq
@@ -159,7 +207,7 @@ class VortexRing(Component):
 
         cdef double dt, ringFrac
 
-        #cdef np.ndarray[DTYPE_t, ndim=1] thetaArray
+        cdef double[:] thetaArray
 
 
         # how do we type attributes?????????????? like yN
@@ -193,6 +241,8 @@ class VortexRing(Component):
             Nw = 5
             Ntt = 1
             Ntheta = 15
+
+        max_thetaArray_shape = Ntheta
 
         # Break out deformations
         qq = np.zeros((6, self.Ns+1))
@@ -228,8 +278,29 @@ class VortexRing(Component):
         self.r[0, :] = self.yN.T
         self.z[0, :] = qh[:]
 
-        self.vz, self.vr, self.z, self.r, self.Gamma = main_loop(self.h,self.rho,yE,dy,qh,Nw,Ntt,self.Ns,self.z,self.r,
-            self.Gamma,self.Omega,self.dT, self.yN, self.b,dtheta,thetaArray,cr)
+        t0 = time.time()
+        self.vz, self.vr, self.z, self.r, self.Gamma = main_loop(
+            self.h,
+            self.rho,
+            yE,
+            dy,
+            qh,
+            Nw,
+            Ntt,
+            self.Ns,
+            self.z,
+            self.r,
+            self.Gamma,
+            self.Omega,
+            self.dT,
+            self.yN,
+            self.b,
+            dtheta,
+            Ntheta,
+            thetaArray,
+            cr)
+
+        print "main_loop time", time.time() - t0
 
         # # free-wake time stepping
         # for t in range(Nw+1):
@@ -296,6 +367,8 @@ class VortexRing(Component):
         #     self.r[0, :] = self.yN.T
         #     self.z[0, :] = qh[:]
 
+        t0 = time.time()
+
         # Compute induced velocity on rotor (rp = [0 r(s) 0])
         for s in range(self.Ns):                # for each element
             self.vi[s] = 0
@@ -316,7 +389,7 @@ class VortexRing(Component):
                     Y2 = (yp - r*cos(thetaArray))**2
                     Z2 = (zp - zr)**2
                     Normal = sqrt(X2 + Y2 + Z2)
-                    for iii in range(max(thetaArray.shape)):
+                    for iii in range(max_thetaArray_shape):
                         if Normal[iii] < cr:
                             Normal[iii] = cr
                     Norm3 = Normal**3
@@ -327,12 +400,14 @@ class VortexRing(Component):
                     zr = -2*self.h - self.z[ii, ss]
                     Z2 = (zp - zr)**2
                     Normal = sqrt(X2 + Y2 + Z2)
-                    for iii in range(max(thetaArray.shape)):
+                    for iii in range(max_thetaArray_shape):
                         if Normal[iii] < cr:
                             Normal[iii] = cr
                     Norm3 = Normal**3
 
                     self.vi[s] = self.vi[s] - ringFrac * np.sum((cos(thetaArray)*yp - r) / Norm3) * M
+
+        print "other loop time", time.time() - t0
 
         # vi is positive downwards
         self.vi = -self.vi

@@ -56,6 +56,7 @@ class VortexRing(Component):
         for s in range(1, self.Ns+1):
             qq[:, s] = self.q[s*6:s*6+6].T
         qh = (qq[2, :] - self.yN.T * self.anhedral).flatten()
+        print "qh", qh.shape
 
         cr = 0.5 * mean(dy)
         dtheta = pi / Ntheta
@@ -79,6 +80,8 @@ class VortexRing(Component):
 
         self.r[0, :] = self.yN.T
         self.z[0, :] = qh[:]
+
+        print "self.thetaArray.shape", self.thetaArray.shape, Ntheta
 
         # free-wake time stepping
         for t in range(Nw+1):

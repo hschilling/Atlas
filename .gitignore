@@ -3,6 +3,7 @@
 *.DS_Store
 *.gz
 *.so
+*.lprof
 *.egg-info
 *openmdao_log.txt
 *~

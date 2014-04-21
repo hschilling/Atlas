@@ -4,7 +4,7 @@ import unittest
 
 from scipy.io import loadmat
 
-from Atlas import VortexRing
+from Atlas import VortexRingCython
 #from vortex_cython import VortexRing
 
 
@@ -20,7 +20,7 @@ class Test_VortexRing(unittest.TestCase):
     def test_Vortex(self):
         """ Test the vortex ring component
         """
-        comp = VortexRing()
+        comp = VortexRingCython()
 
         # populate inputs
         path = os.path.join(os.path.dirname(__file__), 'vortex.mat')
@@ -46,6 +46,8 @@ class Test_VortexRing(unittest.TestCase):
         print("Elapsed time was %g seconds" % (end_time - start_time))
 
         # check outputs
+        print comp.vi
+        print data['vi']
         assert relative_err(comp.vi, data['vi']) < 1e-7
 
         for i, val in enumerate(data['vi']):

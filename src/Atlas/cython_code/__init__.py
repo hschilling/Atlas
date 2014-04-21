@@ -1,1 +1,1 @@
-from .vortex_cython import VortexRing
+from .vortex_cython import VortexRingCython
