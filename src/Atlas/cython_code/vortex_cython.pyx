@@ -103,8 +103,9 @@ def main_loop(
                             # for iii in range(max_thetaArray_shape):
                             #     if Normal[iii] < cr:
                             #         Normal[iii] = cr
-                            Norm3 = Normal**3
-                            inv_Norm3 = 1.0/ Norm3
+                            #Norm3 = Normal**3
+                            #Norm3 = Normal*Normal*Normal
+                            inv_Norm3 = 1.0/ (Normal*Normal*Normal)
                             #vr[i, s] = vr[i, s] + np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
                             vr[i, s] = vr[i, s] + np.sum(-cos_thetaArray * (zp - zr) * inv_Norm3) * M
                             #vz[i, s] = vz[i, s] + np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
@@ -116,8 +117,8 @@ def main_loop(
                             # for iii in range(max_thetaArray_shape):
                             #     if Normal[iii] < cr:
                             #         Normal[iii] = cr
-                            Norm3 = Normal**3
-                            inv_Norm3 = 1.0/ Norm3
+                            #Norm3 = Normal**3
+                            inv_Norm3 = 1.0/ (Normal*Normal*Normal)
                             vr[i, s] = vr[i, s] - np.sum(-cos_thetaArray * (zp - zr) * inv_Norm3) * M
                             #vr[i, s] = vr[i, s] - np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
                             vz[i, s] = vz[i, s] - np.sum((cos_thetaArray * yp - r_scalar) * inv_Norm3) * M
