@@ -67,6 +67,10 @@ def main_loop(
 
     cdef double one_over_two_pi = 1.0/ 2 * pi
 
+    cdef double acc = 0.0
+    cdef double[:] tmp
+    cdef int j
+
     #cdef double[:] sin_thetaArray, cos_thetaArray
     sin_thetaArray = sin(thetaArray)
     cos_thetaArray = cos(thetaArray)
@@ -107,9 +111,19 @@ def main_loop(
                             #Norm3 = Normal*Normal*Normal
                             inv_Norm3 = 1.0/ (Normal*Normal*Normal)
                             #vr[i, s] = vr[i, s] + np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
-                            vr[i, s] = vr[i, s] + np.sum(-cos_thetaArray * (zp - zr) * inv_Norm3) * M
+                            tmp = -cos_thetaArray * (zp - zr) * inv_Norm3
+                            acc = 0.0
+                            for j in range(Ntheta):
+                                acc += tmp[i]
+                            vr[i, s] +=  acc * M
+                            #vr[i, s] = vr[i, s] + np.sum(-cos_thetaArray * (zp - zr) * inv_Norm3) * M
                             #vz[i, s] = vz[i, s] + np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
-                            vz[i, s] = vz[i, s] + np.sum((cos_thetaArray * yp - r_scalar) * inv_Norm3) * M
+                            tmp = (cos_thetaArray * yp - r_scalar) * inv_Norm3
+                            acc = 0.0
+                            for j in range(Ntheta):
+                                acc += tmp[i]
+                            vz[i, s] += acc * M
+                            #vz[i, s] = vz[i, s] + np.sum((cos_thetaArray * yp - r_scalar) * inv_Norm3) * M
                             zr = -2*h - z[ii, ss]
                             Z2 = (zp - zr)**2
                             Normal = sqrt(X2 + Y2 + Z2)
@@ -119,9 +133,18 @@ def main_loop(
                             #         Normal[iii] = cr
                             #Norm3 = Normal**3
                             inv_Norm3 = 1.0/ (Normal*Normal*Normal)
-                            vr[i, s] = vr[i, s] - np.sum(-cos_thetaArray * (zp - zr) * inv_Norm3) * M
+                            tmp = -cos_thetaArray * (zp - zr) * inv_Norm3
+                            acc = 0.0
+                            for j in range(Ntheta):
+                                acc += tmp[i]
+                            vr[i, s] -= - acc * M
                             #vr[i, s] = vr[i, s] - np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
-                            vz[i, s] = vz[i, s] - np.sum((cos_thetaArray * yp - r_scalar) * inv_Norm3) * M
+                            tmp = (cos_thetaArray * yp - r_scalar) * inv_Norm3
+                            acc = 0.0
+                            for j in range(Ntheta):
+                                acc += tmp[i]
+                            vz[i, s] -= - acc * M
+                            #vz[i, s] = vz[i, s] - np.sum((cos_thetaArray * yp - r_scalar) * inv_Norm3) * M
                             #vz[i, s] = vz[i, s] - np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
 
             # Compute altitude and time power approximation
