@@ -26,7 +26,10 @@ ctypedef np.float_t DTYPE_t
 
 
 #import numpy as np
-from numpy import pi, cos, sin, mean, linspace , sqrt
+#from numpy import pi, cos, sin, mean, linspace , sqrt
+from numpy import pi, mean, linspace 
+
+from libc.math cimport sin, cos, sqrt
 
 #from libc.math cimport sqrt # that is for scalars
 
@@ -70,10 +73,25 @@ def main_loop(
     cdef double acc = 0.0
     cdef double[:] tmp
     cdef int j
+    cdef double v, n
+    cdef np.ndarray[np.double_t, ndim=1] inv_Norm3
 
-    #cdef double[:] sin_thetaArray, cos_thetaArray
-    sin_thetaArray = sin(thetaArray)
-    cos_thetaArray = cos(thetaArray)
+    cdef double[:] sin_thetaArray, cos_thetaArray
+
+    X2 = np.empty(Ntheta)
+    Y2 = np.empty(Ntheta)
+    Normal = np.empty(Ntheta)
+    inv_Norm3 = np.empty(Ntheta)
+    sin_thetaArray = np.empty(Ntheta)
+    cos_thetaArray = np.empty(Ntheta)
+
+
+    #sin_thetaArray = sin(thetaArray)
+    #cos_thetaArray = cos(thetaArray)
+    for j in range(Ntheta):
+        sin_thetaArray[j] = sin(thetaArray[j] )
+        cos_thetaArray[j] = cos(thetaArray[j] )
+
 
     #sin_thetaArray = sin( thetaArray)
     #cos_thetaArray = cos( thetaArray)
@@ -96,56 +114,79 @@ def main_loop(
                             zp = z[i, s]
                             yp = r[i, s]
                             M  = Gamma[ii, ss] * r_scalar * dtheta * one_over_two_pi
+
                             #X2 = (-r_scalar*sin(thetaArray))**2
-                            X2 = (-r_scalar*sin_thetaArray)**2
+                            #X2 = (-r_scalar*sin_thetaArray)**2
+                            for j in range(Ntheta):
+                                v = (-r_scalar*sin_thetaArray[j])
+                                X2[j] = v * v
+
                             #Y2 = (yp - r_scalar*cos(thetaArray))**2
-                            Y2 = (yp - r_scalar*cos_thetaArray)**2
+                            #Y2 = (yp - r_scalar*cos_thetaArray)**2
+                            for j in range(Ntheta):
+                                v = (yp - r_scalar*cos_thetaArray[j])
+                                Y2[j] = v * v
+
                             Z2 = (zp - zr)**2
-                            Normal = sqrt(X2 + Y2 + Z2)
-                            # a[np.abs(a) < eps] = 0
-                            Normal[ Normal < cr ] = cr
-                            # for iii in range(max_thetaArray_shape):
-                            #     if Normal[iii] < cr:
-                            #         Normal[iii] = cr
+                            #Normal = sqrt(X2 + Y2 + Z2)
+                            for j in range(Ntheta):
+                                Normal[j] = sqrt(X2[j] + Y2[j] + Z2)
+
+                            for iii in range(Ntheta):
+                                if Normal[iii] < cr:
+                                    Normal[iii] = cr
+                            #Normal[ Normal < cr ] = cr
+
                             #Norm3 = Normal**3
                             #Norm3 = Normal*Normal*Normal
-                            inv_Norm3 = 1.0/ (Normal*Normal*Normal)
+                            #nv_Norm3 = 1.0/ (Normal*Normal*Normal)
+                            for j in range(Ntheta):
+                                n = Normal[j]
+                                inv_Norm3[j] = 1.0/ ( n * n * n )
                             #vr[i, s] = vr[i, s] + np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
-                            tmp = -cos_thetaArray * (zp - zr) * inv_Norm3
+                            #tmp = -cos_thetaArray * (zp - zr) * inv_Norm3
                             acc = 0.0
                             for j in range(Ntheta):
-                                acc += tmp[i]
+                                acc += -cos_thetaArray[j] * (zp - zr) * inv_Norm3[j]
                             vr[i, s] +=  acc * M
-                            #vr[i, s] = vr[i, s] + np.sum(-cos_thetaArray * (zp - zr) * inv_Norm3) * M
+
                             #vz[i, s] = vz[i, s] + np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
-                            tmp = (cos_thetaArray * yp - r_scalar) * inv_Norm3
+                            #tmp = (cos_thetaArray * yp - r_scalar) * inv_Norm3
                             acc = 0.0
                             for j in range(Ntheta):
-                                acc += tmp[i]
+                                acc += (cos_thetaArray[j] * yp - r_scalar) * inv_Norm3[j]
                             vz[i, s] += acc * M
-                            #vz[i, s] = vz[i, s] + np.sum((cos_thetaArray * yp - r_scalar) * inv_Norm3) * M
+
                             zr = -2*h - z[ii, ss]
                             Z2 = (zp - zr)**2
-                            Normal = sqrt(X2 + Y2 + Z2)
-                            Normal[ Normal < cr ] = cr
-                            # for iii in range(max_thetaArray_shape):
-                            #     if Normal[iii] < cr:
-                            #         Normal[iii] = cr
+                            #Normal = sqrt(X2 + Y2 + Z2)
+                            for j in range(Ntheta):
+                                Normal[j] = sqrt(X2[j] + Y2[j] + Z2)
+
+                            for iii in range(Ntheta):
+                                if Normal[iii] < cr:
+                                    Normal[iii] = cr
+                            #Normal[ Normal < cr ] = cr
+
                             #Norm3 = Normal**3
-                            inv_Norm3 = 1.0/ (Normal*Normal*Normal)
-                            tmp = -cos_thetaArray * (zp - zr) * inv_Norm3
-                            acc = 0.0
+                            #inv_Norm3 = 1.0/ (Normal*Normal*Normal)
                             for j in range(Ntheta):
-                                acc += tmp[i]
-                            vr[i, s] -= - acc * M
+                                n = Normal[j]
+                                inv_Norm3[j] = 1.0/ ( n * n * n )
+
                             #vr[i, s] = vr[i, s] - np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
-                            tmp = (cos_thetaArray * yp - r_scalar) * inv_Norm3
+                            #tmp = -cos_thetaArray * (zp - zr) * inv_Norm3
                             acc = 0.0
                             for j in range(Ntheta):
-                                acc += tmp[i]
-                            vz[i, s] -= - acc * M
-                            #vz[i, s] = vz[i, s] - np.sum((cos_thetaArray * yp - r_scalar) * inv_Norm3) * M
+                                acc += -cos_thetaArray[j] * (zp - zr) * inv_Norm3[j]
+                            vr[i, s] -= - acc * M
+
                             #vz[i, s] = vz[i, s] - np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
+                            #tmp = (cos_thetaArray * yp - r_scalar) * inv_Norm3
+                            acc = 0.0
+                            for j in range(Ntheta):
+                                acc += (cos_thetaArray[j] * yp - r_scalar) * inv_Norm3[j]
+                            vz[i, s] -= - acc * M
 
             # Compute altitude and time power approximation
             # if tt == 0:
@@ -226,7 +267,7 @@ class VortexRingCython(Component):
         cdef np.ndarray[DTYPE_t, ndim=2] GammaBound
 
         cdef double zr, r, zp, yp, M, Z2
-        cdef np.ndarray[DTYPE_t, ndim=1] X2, Y2, Normal, Norm3
+        cdef np.ndarray[DTYPE_t, ndim=1] X2, Y2, Normal
         #cdef double[:] X2, Y2, Normal, Norm3 # does not seem to work with array operations like '+' and 'sqrt'. Get cython errors
 
         cdef double dt, ringFrac
@@ -393,6 +434,14 @@ class VortexRingCython(Component):
 
         t0 = time.time()
 
+        X2 = np.empty(Ntheta)
+        Y2 = np.empty(Ntheta)
+        Normal = np.empty(Ntheta)
+        inv_Norm3 = np.empty(Ntheta)
+        sin_thetaArray = np.empty(Ntheta)
+        cos_thetaArray = np.empty(Ntheta)
+
+
         # Compute induced velocity on rotor (rp = [0 r(s) 0])
         for s in range(self.Ns):                # for each element
             self.vi[s] = 0
@@ -409,28 +458,47 @@ class VortexRingCython(Component):
                     yp = yE[s]
 
                     M  = self.Gamma[ii, ss] * r * dtheta / (2*pi)
-                    X2 = (-r*sin(thetaArray))**2
-                    Y2 = (yp - r*cos(thetaArray))**2
+                    #X2 = (-r*sin(thetaArray))**2
+                    for j in range(Ntheta):
+                        X2[j] = (-r*sin_thetaArray[j])**2
+                    #Y2 = (yp - r*cos(thetaArray))**2
+                    for j in range(Ntheta):
+                        Y2[j] = (yp - r*cos_thetaArray[j])**2
                     Z2 = (zp - zr)**2
-                    Normal = sqrt(X2 + Y2 + Z2)
-                    for iii in range(max_thetaArray_shape):
+                    #Normal = sqrt(X2 + Y2 + Z2)
+                    for j in range(Ntheta):
+                        Normal[j] = sqrt(X2[j] + Y2[j] + Z2)
+                    for iii in range(Ntheta):
                         if Normal[iii] < cr:
                             Normal[iii] = cr
-                    Norm3 = Normal**3
+                    for j in range(Ntheta):
+                        n = Normal[j]
+                        inv_Norm3[j] = 1.0/ ( n * n * n )
 
-                    self.vi[s] = self.vi[s] + ringFrac * np.sum((cos(thetaArray)*yp - r) / Norm3) * M
-
+                    #self.vi[s] = self.vi[s] + ringFrac * np.sum((cos(thetaArray)*yp - r) / Norm3) * M
+                    acc = 0.0
+                    for j in range(Ntheta):
+                        acc += (cos_thetaArray[j]*yp - r) * inv_Norm3[j]
+                    self.vi[s] += ringFrac * M * acc
                     # ground effect ring
                     zr = -2*self.h - self.z[ii, ss]
                     Z2 = (zp - zr)**2
-                    Normal = sqrt(X2 + Y2 + Z2)
-                    for iii in range(max_thetaArray_shape):
+                    #Normal = sqrt(X2 + Y2 + Z2)
+                    for j in range(Ntheta):
+                        Normal[j] = sqrt(X2[j] + Y2[j] + Z2)
+                    for iii in range(Ntheta):
                         if Normal[iii] < cr:
                             Normal[iii] = cr
-                    Norm3 = Normal**3
+                    for j in range(Ntheta):
+                        n = Normal[j]
+                        inv_Norm3[j] = 1.0/ ( n * n * n )
+                    #Norm3 = Normal**3
 
-                    self.vi[s] = self.vi[s] - ringFrac * np.sum((cos(thetaArray)*yp - r) / Norm3) * M
-
+                    #self.vi[s] = self.vi[s] - ringFrac * np.sum((cos(thetaArray)*yp - r) / Norm3) * M
+                    acc = 0
+                    for j in range(Ntheta):
+                        acc += (cos_thetaArray[j]*yp - r) * inv_Norm3[j]
+                    self.vi[s] -= ringFrac * acc * M
         print "other loop time", time.time() - t0
 
         # vi is positive downwards
