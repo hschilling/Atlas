@@ -2,7 +2,6 @@ import numpy as np
 cimport cython
 cimport numpy as np 
 
-
 from openmdao.main.api import Component
 from openmdao.lib.datatypes.api import Float, Array, Int
 import numpy as np
@@ -11,37 +10,53 @@ from numpy import pi, cos, sin, mean, linspace, sqrt
 
 #from libc.math cimport sin, cos, sqrt
 from libc.math cimport sqrt as scalar_sqrt
+from libc.math cimport cos as scalar_cos
+from libc.math cimport sin as scalar_sin
 
+DTYPE = np.double
+ctypedef double DTYPE_t
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
+@cython.cdivision(True)
 def main_loop(
-            h,
-            rho,
-            yE,
-            dy,
-            qh,
-            Nw,
-            Ntt,
-            Ns,
-            z,
-            r,
-            Gamma,
-            Omega,
-            dT,
-            yN,
-            b,
-            dtheta,
-            Ntheta,
-            thetaArray,
-            cr):
+    double h,
+    double rho,
+    np.ndarray[DTYPE_t, ndim=2] yE,
+    np.ndarray[DTYPE_t, ndim=2] dy,
+    double[:] qh,
+    int Nw,
+    int Ntt,
+    int Ns,
+    np.ndarray[DTYPE_t, ndim=2] z,
+    np.ndarray[DTYPE_t, ndim=2] r,
+    np.ndarray[DTYPE_t, ndim=2]  Gamma,
+    #double[:, ::1]  Gamma,
+    double Omega,
+    np.ndarray[DTYPE_t, ndim=2] dT, 
+    np.ndarray[DTYPE_t, ndim=2] yN,
+    double b,
+    double dtheta,
+    unsigned int Ntheta,
+    double[:] thetaArray,
+    double cr):
+
+    cdef unsigned int t, tt, i, s, ii, ss, j
+    cdef np.ndarray[DTYPE_t, ndim=2] vz,vr
+    cdef double zr, r_scalar, zp, yp, M, Z2
+    cdef double acc1, acc2
+    cdef np.ndarray[np.double_t, ndim=1] Normal, X2, Y2, Norm3, sin_thetaArray, cos_thetaArray
+
+    cdef double one_over_two_pi = 1.0/ ( 2.0 * pi )
+
+    cdef double dt
 
     sin_thetaArray = np.empty(Ntheta)
     cos_thetaArray = np.empty(Ntheta)
     for j in range(Ntheta):
-        sin_thetaArray[j] = sin(thetaArray[j] )
-        cos_thetaArray[j] = cos(thetaArray[j] )
+        sin_thetaArray[j] = scalar_sin(thetaArray[j] )
+        cos_thetaArray[j] = scalar_cos(thetaArray[j] )
 
     X2 = np.empty(Ntheta)
     Y2 = np.empty(Ntheta)
@@ -63,7 +78,7 @@ def main_loop(
                             r_scalar  = r[ii, ss]
                             zp = z[i, s]
                             yp = r[i, s]
-                            M  = Gamma[ii, ss] * r_scalar * dtheta / (2*pi)
+                            M  = Gamma[ii, ss] * r_scalar * dtheta * one_over_two_pi
                             Z2 = (zp - zr)**2
 
                             #X2 = (-r_scalar*sin_thetaArray)**2
@@ -209,6 +224,7 @@ class VortexRingCython(Component):
         self.z[0, :] = qh[:]
 
 
+        t0 = time.time()
         self.vz, self.vr, self.z, self.r, self.Gamma = main_loop(
             self.h,
             self.rho,
