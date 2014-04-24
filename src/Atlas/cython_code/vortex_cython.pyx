@@ -7,8 +7,15 @@ from openmdao.main.api import Component
 from openmdao.lib.datatypes.api import Float, Array, Int
 import numpy as np
 from numpy import pi, cos, sin, mean, linspace, sqrt
+#from numpy import pi, cos, sin, mean, linspace
+
+#from libc.math cimport sin, cos, sqrt
+from libc.math cimport sqrt as scalar_sqrt
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
 def main_loop(
             h,
             rho,
@@ -30,6 +37,17 @@ def main_loop(
             thetaArray,
             cr):
 
+    sin_thetaArray = np.empty(Ntheta)
+    cos_thetaArray = np.empty(Ntheta)
+    for j in range(Ntheta):
+        sin_thetaArray[j] = sin(thetaArray[j] )
+        cos_thetaArray[j] = cos(thetaArray[j] )
+
+    X2 = np.empty(Ntheta)
+    Y2 = np.empty(Ntheta)
+    Normal = np.empty(Ntheta)
+    Norm3 = np.empty(Ntheta)
+
     # free-wake time stepping
     for t in range(Nw+1):
         # proceed with substeps
@@ -46,25 +64,42 @@ def main_loop(
                             zp = z[i, s]
                             yp = r[i, s]
                             M  = Gamma[ii, ss] * r_scalar * dtheta / (2*pi)
-                            X2 = (-r_scalar*sin(thetaArray))**2
-                            Y2 = (yp - r_scalar*cos(thetaArray))**2
                             Z2 = (zp - zr)**2
-                            Normal = sqrt(X2 + Y2 + Z2)
-                            for iii in range(max(thetaArray.shape)):
-                                if Normal[iii] < cr:
-                                    Normal[iii] = cr
-                            Norm3 = Normal**3
-                            vr[i, s] = vr[i, s] + np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
-                            vz[i, s] = vz[i, s] + np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
+
+                            #X2 = (-r_scalar*sin_thetaArray)**2
+                            #Y2 = (yp - r_scalar*cos_thetaArray)**2
+                            #Normal = sqrt(X2 + Y2 + Z2)
+                            #vr[i, s] += np.sum(-cos_thetaArray * (zp - zr) / Norm3) * M
+                            #vz[i, s] += np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
+                            acc1 = acc2 = 0.0
+                            for j in range(Ntheta):
+                                X2[j] = (-r_scalar*sin_thetaArray[j])**2
+                                Y2[j] = (yp - r_scalar*cos_thetaArray[j])**2
+                                Normal[j] = scalar_sqrt(X2[j] + Y2[j] + Z2)
+                                if Normal[j] < cr:
+                                    Normal[j] = cr
+                                Norm3[j] = Normal[j]**3
+                                acc1 += -cos_thetaArray[j] * (zp - zr) / Norm3[j]
+                                acc2 += (cos_thetaArray[j] * yp - r_scalar) / Norm3[j]
+                            vr[i, s] += acc1 * M
+                            vz[i, s] += acc2 * M
+
                             zr = -2*h - z[ii, ss]
                             Z2 = (zp - zr)**2
-                            Normal = sqrt(X2 + Y2 + Z2)
-                            for iii in range(max(thetaArray.shape)):
-                                if Normal[iii] < cr:
-                                    Normal[iii] = cr
-                            Norm3 = Normal**3
-                            vr[i, s] = vr[i, s] - np.sum(-cos(thetaArray) * (zp - zr) / Norm3) * M
-                            vz[i, s] = vz[i, s] - np.sum((cos(thetaArray) * yp - r_scalar) / Norm3) * M
+
+                            #Normal = sqrt(X2 + Y2 + Z2)
+                            #vr[i, s] -= np.sum(-cos_thetaArray * (zp - zr) / Norm3) * M
+                            #vz[i, s] -= np.sum((cos_thetaArray * yp - r_scalar) / Norm3) * M
+                            acc1 = acc2 = 0.0
+                            for j in range(Ntheta):
+                                Normal[j] = scalar_sqrt(X2[j] + Y2[j] + Z2)
+                                if Normal[j] < cr:
+                                    Normal[j] = cr
+                                Norm3[j] = Normal[j]**3
+                                acc1 -= - cos_thetaArray[j] * (zp - zr) / Norm3[j]
+                                acc2 -= (cos_thetaArray[j] * yp - r_scalar) / Norm3[j]
+                            vr[i, s] += acc1 * M
+                            vz[i, s] += acc2 * M
 
             # Compute altitude and time power approximation
             # if tt == 0:
