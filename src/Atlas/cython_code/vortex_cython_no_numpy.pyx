@@ -198,9 +198,9 @@ def main_loop(
             dt = 2*pi_c / Omega / b / Ntt
             for i in range(t):              # for each disk
                 for s in range(Ns+1):  # and for each ring on each disk
-                    z[i, s] = z[i, s] + vz[i, s]*dt
-                    r[i, s] = r[i, s] + vr[i, s]*dt
-                    Gamma[i, s] = Gamma[i, s]
+                    z[i, s] += vz[i, s]*dt
+                    r[i, s] += vr[i, s]*dt
+                    #Gamma[i, s] = Gamma[i, s]
 
         # Shift elements in ring array
         for i in range(t)[::-1]:

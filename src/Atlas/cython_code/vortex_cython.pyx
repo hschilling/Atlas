@@ -40,7 +40,8 @@ def main_loop(
     double dtheta,
     unsigned int Ntheta,
     double[:] thetaArray,
-    double cr):
+    double cr,
+    np.ndarray[DTYPE_t, ndim=2] vi):
 
     cdef unsigned int t, tt, i, s, ii, ss, j
     cdef np.ndarray[DTYPE_t, ndim=2] vz,vr
@@ -51,6 +52,8 @@ def main_loop(
     cdef double one_over_two_pi = 1.0/ ( 2.0 * pi )
 
     cdef double dt
+
+    cdef double nl, n3, normal, inv_n3
 
     sin_thetaArray = np.empty(Ntheta)
     cos_thetaArray = np.empty(Ntheta)
@@ -63,13 +66,22 @@ def main_loop(
     Normal = np.empty(Ntheta)
     Norm3 = np.empty(Ntheta)
 
+    dt = 2*pi / Omega / b / Ntt
+
+    vz = np.empty((Nw+1, Ns+1))
+    vr = np.empty((Nw+1, Ns+1))
+
     # free-wake time stepping
     for t in range(Nw+1):
         # proceed with substeps
         for tt in range(Ntt):
             # Compute induced velocity on all ix(Ns+1) rings from all iix(Ns+1) rings
-            vz = np.zeros((Nw+1, Ns+1))
-            vr = np.zeros((Nw+1, Ns+1))
+            #vz = np.zeros((Nw+1, Ns+1))
+            #vr = np.zeros((Nw+1, Ns+1))
+            for i in range(Nw+1):
+                for j in range(Ns+1):
+                    vz[i,j] = 0.0
+                    vr[i,j] = 0.0
             for i in range(t):                       # for each disk
                 for s in range(Ns+1):           # and for each ring on each disk
                     for ii in range(t):              # add the velocity induced from each disk
@@ -90,12 +102,12 @@ def main_loop(
                             for j in range(Ntheta):
                                 X2[j] = (-r_scalar*sin_thetaArray[j])**2
                                 Y2[j] = (yp - r_scalar*cos_thetaArray[j])**2
-                                Normal[j] = scalar_sqrt(X2[j] + Y2[j] + Z2)
-                                if Normal[j] < cr:
-                                    Normal[j] = cr
-                                Norm3[j] = Normal[j]**3
-                                acc1 += -cos_thetaArray[j] * (zp - zr) / Norm3[j]
-                                acc2 += (cos_thetaArray[j] * yp - r_scalar) / Norm3[j]
+                                normal = scalar_sqrt(X2[j] + Y2[j] + Z2)
+                                if normal < cr:
+                                    normal = cr
+                                inv_n3 = 1.0 / ( normal * normal * normal )
+                                acc1 += -cos_thetaArray[j] * (zp - zr) * inv_n3
+                                acc2 += (cos_thetaArray[j] * yp - r_scalar) * inv_n3
                             vr[i, s] += acc1 * M
                             vz[i, s] += acc2 * M
 
@@ -107,12 +119,12 @@ def main_loop(
                             #vz[i, s] -= np.sum((cos_thetaArray * yp - r_scalar) / Norm3) * M
                             acc1 = acc2 = 0.0
                             for j in range(Ntheta):
-                                Normal[j] = scalar_sqrt(X2[j] + Y2[j] + Z2)
-                                if Normal[j] < cr:
-                                    Normal[j] = cr
-                                Norm3[j] = Normal[j]**3
-                                acc1 -= - cos_thetaArray[j] * (zp - zr) / Norm3[j]
-                                acc2 -= (cos_thetaArray[j] * yp - r_scalar) / Norm3[j]
+                                normal = scalar_sqrt(X2[j] + Y2[j] + Z2)
+                                if normal < cr:
+                                    normal = cr
+                                inv_n3 = 1.0 / ( normal * normal * normal )
+                                acc1 -= - cos_thetaArray[j] * (zp - zr) * inv_n3
+                                acc2 -= (cos_thetaArray[j] * yp - r_scalar) * inv_n3
                             vr[i, s] += acc1 * M
                             vz[i, s] += acc2 * M
 
@@ -123,7 +135,6 @@ def main_loop(
             # altitude = vc * realtime
 
             # Convect rings downstream
-            dt = 2*pi / Omega / b / Ntt
             for i in range(t):              # for each disk
                 for s in range(Ns+1):  # and for each ring on each disk
                     z[i, s] = z[i, s] + vz[i, s]*dt
@@ -145,7 +156,51 @@ def main_loop(
         r[0, :] = yN.T
         z[0, :] = qh[:]
 
-    return vz, vr, z, r, Gamma
+    # Compute induced velocity on rotor (rp = [0 r(s) 0])
+    for s in range(Ns):                # for each element
+        vi[s,0] = 0
+        for ii in range(Nw):                # add the velocity induced from each disk
+            for ss in range(1, Ns+1):  # and each ring on each disk (inner ring cancels itself out)
+                if (ii == 0):
+                    ringFrac = 0.675
+                else:
+                    ringFrac = 1
+
+                zr = z[ii, ss]
+                r_scalar  = r[ii, ss]
+                zp = (qh[s] + qh[s+1]) / 2
+                yp = yE[s,0]
+
+                Z2 = (zp - zr)**2
+                M  = Gamma[ii, ss] * r_scalar * dtheta * one_over_two_pi
+
+                #vi[s] = vi[s] + ringFrac * np.sum((cos(self.thetaArray)*yp - r) / Norm3) * M
+                acc1 = 0.0
+                for j in range(Ntheta):
+                    X2[j] = (-r_scalar*sin_thetaArray[j])**2
+                    Y2[j] = (yp - r_scalar*cos_thetaArray[j])**2
+                    normal = scalar_sqrt(X2[j] + Y2[j] + Z2)
+                    if normal < cr:
+                        normal = cr
+                    inv_n3 = 1.0 / ( normal * normal * normal )
+                    acc1 += (cos_thetaArray[j]*yp - r_scalar) * inv_n3
+                vi[s,0] += ringFrac * acc1 * M
+
+                # ground effect ring
+                zr = -2*h - z[ii, ss]
+                Z2 = (zp - zr)**2
+
+                #vi[s] = vi[s] - ringFrac * np.sum((cos(self.thetaArray)*yp - r) / Norm3) * M
+                acc2 = 0.0
+                for j in range(Ntheta):
+                    normal = scalar_sqrt(X2[j] + Y2[j] + Z2)
+                    if normal < cr:
+                        normal = cr
+                    inv_n3 = 1.0 / ( normal * normal * normal )
+                    acc2 += (cos_thetaArray[j]*yp - r_scalar) * inv_n3
+                vi[s,0] -= ringFrac * acc2 * M
+
+    return vz, vr, z, r, Gamma, vi
 
 class VortexRingCython(Component):
     """
@@ -224,8 +279,7 @@ class VortexRingCython(Component):
         self.z[0, :] = qh[:]
 
 
-        t0 = time.time()
-        self.vz, self.vr, self.z, self.r, self.Gamma = main_loop(
+        self.vz, self.vr, self.z, self.r, self.Gamma, self.vi = main_loop(
             self.h,
             self.rho,
             yE,
@@ -244,45 +298,8 @@ class VortexRingCython(Component):
             dtheta,
             Ntheta,
             self.thetaArray,
-            cr)
-
-        # Compute induced velocity on rotor (rp = [0 r(s) 0])
-        for s in range(self.Ns):                # for each element
-            self.vi[s] = 0
-            for ii in range(Nw):                # add the velocity induced from each disk
-                for ss in range(1, self.Ns+1):  # and each ring on each disk (inner ring cancels itself out)
-                    if (ii == 0):
-                        ringFrac = 0.675
-                    else:
-                        ringFrac = 1
-
-                    zr = self.z[ii, ss]
-                    r  = self.r[ii, ss]
-                    zp = (qh[s] + qh[s+1]) / 2
-                    yp = yE[s]
-
-                    M  = self.Gamma[ii, ss] * r * dtheta / (2*pi)
-                    X2 = (-r*sin(self.thetaArray))**2
-                    Y2 = (yp - r*cos(self.thetaArray))**2
-                    Z2 = (zp - zr)**2
-                    Normal = sqrt(X2 + Y2 + Z2)
-                    for iii in range(max(self.thetaArray.shape)):
-                        if Normal[iii] < cr:
-                            Normal[iii] = cr
-                    Norm3 = Normal**3
-
-                    self.vi[s] = self.vi[s] + ringFrac * np.sum((cos(self.thetaArray)*yp - r) / Norm3) * M
-
-                    # ground effect ring
-                    zr = -2*self.h - self.z[ii, ss]
-                    Z2 = (zp - zr)**2
-                    Normal = sqrt(X2 + Y2 + Z2)
-                    for iii in range(max(self.thetaArray.shape)):
-                        if Normal[iii] < cr:
-                            Normal[iii] = cr
-                    Norm3 = Normal**3
-
-                    self.vi[s] = self.vi[s] - ringFrac * np.sum((cos(self.thetaArray)*yp - r) / Norm3) * M
+            cr,
+            self.vi)
 
         # vi is positive downwards
         self.vi = -self.vi
