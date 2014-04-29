@@ -2,12 +2,18 @@ import numpy as np
 cimport cython
 cimport numpy as np 
 
+from cython.view cimport array as cvarray
+
 from openmdao.main.api import Component
 from openmdao.lib.datatypes.api import Float, Array, Int
+import numpy as np
+from numpy import pi, cos, sin, mean, linspace, sqrt
+#from numpy import pi, cos, sin, mean, linspace
 
-from numpy import mean, linspace
-from libc.math cimport sqrt, cos, sin
-from math import pi
+#from libc.math cimport sin, cos, sqrt
+from libc.math cimport sqrt as scalar_sqrt
+from libc.math cimport cos as scalar_cos
+from libc.math cimport sin as scalar_sin
 
 DTYPE = np.double
 ctypedef double DTYPE_t
@@ -38,35 +44,49 @@ def main_loop(
     double[:] thetaArray,
     double cr,
     np.ndarray[DTYPE_t, ndim=2] vi):
-
-    '''made this code a function so it can be Cythonized'''
+    '''
+      converted original code into function so we could use Cython on all the variables and arrays
+    '''
 
     cdef unsigned int t, tt, i, s, ii, ss, j
+    cdef np.ndarray[DTYPE_t, ndim=2] vz_np = np.empty((Nw+1, Ns+1))
+    cdef np.ndarray[DTYPE_t, ndim=2] vr_np = np.empty((Nw+1, Ns+1))
+    #cdef double[:,::1] vz, vr
     cdef double zr, r_scalar, zp, yp, M, Z2
-
-    cdef np.ndarray[DTYPE_t, ndim=2] vz,vr
-    cdef np.ndarray[np.double_t, ndim=1] Normal, X2, Y2, Norm3, sin_thetaArray, cos_thetaArray
-
     cdef double acc1, acc2
+    cdef double[:] Normal, X2, Y2, Norm3, sin_thetaArray, cos_thetaArray
+
     cdef double one_over_two_pi = 1.0/ ( 2.0 * pi )
+
     cdef double dt
+
     cdef double nl, n3, normal, inv_n3
+    cdef double[:,::1] vz = cvarray(shape=(Nw+1, Ns+1), itemsize=sizeof(double), format="d")
+    
+    #cdef double[:,::1] vz = np.empty((Nw+1, Ns+1))
+    cdef double[:,::1] vr = cvarray(shape=(Nw+1, Ns+1), itemsize=sizeof(double), format="d")
 
-    # init some arrays
-    sin_thetaArray = np.empty(Ntheta)
-    cos_thetaArray = np.empty(Ntheta)
+    #sin_thetaArray = np.empty(Ntheta)
+    #cos_thetaArray = np.empty(Ntheta)
+    sin_thetaArray = cvarray(shape=(Ntheta,), itemsize=sizeof(double), format="d")
+    cos_thetaArray = cvarray(shape=(Ntheta,), itemsize=sizeof(double), format="d")
     for j in range(Ntheta):
-        sin_thetaArray[j] = sin(thetaArray[j] )
-        cos_thetaArray[j] = cos(thetaArray[j] )
+        sin_thetaArray[j] = scalar_sin(thetaArray[j] )
+        cos_thetaArray[j] = scalar_cos(thetaArray[j] )
 
-    X2 = np.empty(Ntheta)
-    Y2 = np.empty(Ntheta)
-    Normal = np.empty(Ntheta)
-    Norm3 = np.empty(Ntheta)
-    vz = np.empty((Nw+1, Ns+1))
-    vr = np.empty((Nw+1, Ns+1))
+    X2 = cvarray(shape=(Ntheta,), itemsize=sizeof(double), format="d")
+    Y2 = cvarray(shape=(Ntheta,), itemsize=sizeof(double), format="d")
+    Normal = cvarray(shape=(Ntheta,), itemsize=sizeof(double), format="d")
+    Norm3 = cvarray(shape=(Ntheta,), itemsize=sizeof(double), format="d")
 
     dt = 2*pi / Omega / b / Ntt
+
+    # cdef double[:,::1] vz = cvarray(shape=(Nw+1, Ns+1), itemsize=sizeof(double), format="d")
+    
+    #cdef double[:,::1] vz = np.empty((Nw+1, Ns+1))
+    #cdef double[:,::1] vr = np.empty((Nw+1, Ns+1))
+    #vz = np.empty((Nw+1, Ns+1))
+    #vr = np.empty((Nw+1, Ns+1))
 
     # free-wake time stepping
     for t in range(Nw+1):
@@ -99,7 +119,7 @@ def main_loop(
                             for j in range(Ntheta):
                                 X2[j] = (-r_scalar*sin_thetaArray[j])**2
                                 Y2[j] = (yp - r_scalar*cos_thetaArray[j])**2
-                                normal = sqrt(X2[j] + Y2[j] + Z2)
+                                normal = scalar_sqrt(X2[j] + Y2[j] + Z2)
                                 if normal < cr:
                                     normal = cr
                                 inv_n3 = 1.0 / ( normal * normal * normal )
@@ -116,7 +136,7 @@ def main_loop(
                             #vz[i, s] -= np.sum((cos_thetaArray * yp - r_scalar) / Norm3) * M
                             acc1 = acc2 = 0.0
                             for j in range(Ntheta):
-                                normal = sqrt(X2[j] + Y2[j] + Z2)
+                                normal = scalar_sqrt(X2[j] + Y2[j] + Z2)
                                 if normal < cr:
                                     normal = cr
                                 inv_n3 = 1.0 / ( normal * normal * normal )
@@ -176,7 +196,7 @@ def main_loop(
                 for j in range(Ntheta):
                     X2[j] = (-r_scalar*sin_thetaArray[j])**2
                     Y2[j] = (yp - r_scalar*cos_thetaArray[j])**2
-                    normal = sqrt(X2[j] + Y2[j] + Z2)
+                    normal = scalar_sqrt(X2[j] + Y2[j] + Z2)
                     if normal < cr:
                         normal = cr
                     inv_n3 = 1.0 / ( normal * normal * normal )
@@ -190,14 +210,20 @@ def main_loop(
                 #vi[s] = vi[s] - ringFrac * np.sum((cos(self.thetaArray)*yp - r) / Norm3) * M
                 acc2 = 0.0
                 for j in range(Ntheta):
-                    normal = sqrt(X2[j] + Y2[j] + Z2)
+                    normal = scalar_sqrt(X2[j] + Y2[j] + Z2)
                     if normal < cr:
                         normal = cr
                     inv_n3 = 1.0 / ( normal * normal * normal )
                     acc2 += (cos_thetaArray[j]*yp - r_scalar) * inv_n3
                 vi[s,0] -= ringFrac * acc2 * M
 
-    return vz, vr, z, r, Gamma, vi
+    #vz_np = np.asarray(<np.double_t[:, :]> vz)
+    #vr_np = np.asarray(<np.double_t[:, :]> vr)
+    for i in range(Nw+1):
+        for j in range(Ns+1):
+            vz_np[i,j] = vz[i,j]
+            vr_np[i,j] = vr[i,j]
+    return vz_np, vr_np, z, r, Gamma, vi
 
 class VortexRingCython(Component):
     """
